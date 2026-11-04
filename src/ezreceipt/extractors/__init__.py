@@ -1,0 +1,1 @@
+"""Offline receipt extractors."""

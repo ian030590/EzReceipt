@@ -1,0 +1,42 @@
+{
+  "format_version": 1,
+  "id": "tw_post_stamp_purchase",
+  "name": "中華郵政購買票品證明單",
+  "description": "橫式預印票品證明單，手寫或蓋章填入，無品項表格。",
+  "defaults": {"currency": "TWD", "merchant_name": "中華郵政股份有限公司", "tax": 0},
+  "match": {
+    "keywords_any": ["購買票品證明單", "票品證明", "本日確經購買", "證明郵局郵戳"],
+    "min_any": 1,
+    "reference_min_inliers": 25
+  },
+  "reference_image": null,
+  "notes": "根據一份實際樣本確認版面；彎曲郵戳文字可能無法辨識。不擷取經辦員及主管姓名。",
+  "fields": [
+    {"key": "serial_no", "label": "證明單號碼", "type": "text", "target": "custom", "locate": [
+      {"strategy": "regex", "pattern": "第\\s*(\\d{4,})\\s*號", "group": 1},
+      {"strategy": "region", "box": [0.76, 0.07, 0.95, 0.19]}
+    ]},
+    {"key": "buyer", "label": "購買人", "type": "text", "target": "custom", "locate": [
+      {"strategy": "regex", "pattern": "茲證明[ \\t]*(.*?)[ \\t]*本日確經購買", "group": 1},
+      {"strategy": "anchor", "labels": ["茲證明"], "direction": "right", "max_gap": 0.5,
+       "stop_labels": ["本日確經購買"]}
+    ]},
+    {"key": "item_name", "label": "品名", "type": "text", "target": "item_name", "default": "郵票",
+     "locate": [{"strategy": "anchor", "labels": ["本日確經購買"], "direction": "right"}]},
+    {"key": "buyer_tax_id", "label": "統一編號", "type": "tax_id", "target": "buyer_tax_id",
+     "locate": [{"strategy": "anchor", "labels": ["統一編號"], "direction": "right"}]},
+    {"key": "total", "label": "金額", "type": "money", "target": "total",
+     "cross_check": "total_chinese", "locate": [
+      {"strategy": "regex", "pattern": "NT\\s*[:：]?\\s*\\$?\\s*([\\d,]+(?:\\.\\d{1,2})?)", "group": 1},
+      {"strategy": "anchor", "labels": ["計新臺幣"], "direction": "right"}
+    ]},
+    {"key": "total_chinese", "label": "中文金額核對", "type": "money", "target": "check",
+     "locate": [{"strategy": "anchor", "labels": ["計新臺幣"], "direction": "right"}]},
+    {"key": "date", "label": "郵戳日期", "type": "date", "target": "date", "locate": [
+      {"strategy": "regex", "pattern": "(?<!\\d)(\\d{2,3}\\s*[.．]\\s*\\d{1,2}\\s*[.．]\\s*\\d{2})(?:\\d+)?", "group": 1},
+      {"strategy": "region", "box": [0.76, 0.40, 0.92, 0.49]}
+    ]},
+    {"key": "post_office", "label": "收寄郵局", "type": "text", "target": "custom",
+     "locate": [{"strategy": "region", "box": [0.76, 0.30, 0.92, 0.40], "cjk_only": true}]}
+  ]
+}

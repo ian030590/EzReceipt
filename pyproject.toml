@@ -1,0 +1,42 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ezreceipt"
+version = "0.1.0"
+description = "Offline receipt recognition and automatic camera capture"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [{name = "Ian0305"}]
+dependencies = [
+  "numpy>=1.26",
+  "opencv-python-headless>=4.8",
+  "pillow>=10",
+  "rapidocr>=3.10,<4",
+  "onnxruntime>=1.17",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "segno>=1.6", "jsonschema>=4.20", "ruff>=0.6"]
+
+[project.scripts]
+ezreceipt = "ezreceipt.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ezreceipt"]
+
+[tool.hatch.build]
+dev-mode-dirs = ["src"]
+artifacts = ["src/ezreceipt/schema/*.json", "src/ezreceipt/templates/builtin/**"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]

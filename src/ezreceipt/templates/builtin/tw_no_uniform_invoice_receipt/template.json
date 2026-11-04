@@ -1,0 +1,46 @@
+{
+  "format_version": 1,
+  "id": "tw_no_uniform_invoice_receipt",
+  "name": "免用統一發票收據",
+  "description": "預印紅字或黑字收據，支援手寫金額格與備註欄內的商家印章。",
+  "defaults": {"currency": "TWD"},
+  "match": {"keywords_all": ["收據"], "keywords_any": ["免用統一發票", "免用發票"],
+            "min_any": 1, "reference_min_inliers": 25},
+  "reference_image": null,
+  "notes": "頂部統一編號依常見用法視為買方；印章統編為賣方。紅字與手寫數字可能誤讀，請檢查 confidence/warnings。",
+  "fields": [
+    {"key": "buyer_tax_id", "label": "買方統一編號", "type": "tax_id", "target": "buyer_tax_id", "locate": [
+      {"strategy": "anchor", "labels": ["統一編號"], "direction": "right_or_below",
+       "near": {"labels": ["台照", "買受人", "收據"], "max_distance": 0.3}},
+      {"strategy": "region", "box": [0.55, 0.0, 1.0, 0.18]}
+    ]},
+    {"key": "merchant_tax_id", "label": "賣方統一編號", "type": "tax_id", "target": "merchant_tax_id", "locate": [
+      {"strategy": "anchor", "labels": ["專用統一編號", "統一編號", "統編"], "direction": "right_or_below",
+       "not_near": {"labels": ["台照", "買受人", "收據"], "max_distance": 0.3}}
+    ]},
+    {"key": "merchant_name", "label": "商家名稱", "type": "text", "target": "merchant_name", "locate": [
+      {"strategy": "anchor", "labels": ["免用統一發票專用章", "統一發票專用章", "專用章", "專用統一編號", "統一編號"],
+       "direction": "above", "collect": true,
+       "not_near": {"labels": ["台照", "買受人", "收據"], "max_distance": 0.3},
+       "skip": ["專用章", "發票", "統一", "編號", "負責人", "電話", "銀貨兩訖", "台照"], "skip_digits": true},
+      {"strategy": "anchor", "labels": ["營業人名稱", "商號", "店名"], "direction": "right"}
+    ]},
+    {"key": "buyer", "label": "買受人", "type": "text", "target": "custom", "locate": [
+      {"strategy": "anchor", "labels": ["台照"], "direction": "left"},
+      {"strategy": "anchor", "labels": ["買受人"], "direction": "right"}
+    ]},
+    {"key": "date", "label": "日期", "type": "date", "target": "date", "locate": [
+      {"strategy": "row", "contains_all": ["年", "月", "日"], "within": [0.0, 0.0, 1.0, 0.5]},
+      {"strategy": "regex", "pattern": "(?<!\\d)(\\d{2,4}\\s*[-/.年]\\s*\\d{1,2}\\s*[-/.月]\\s*\\d{1,2}日?)(?!\\d)", "group": 1}
+    ]},
+    {"key": "items", "label": "品項", "type": "items", "target": "items", "locate": [
+      {"strategy": "table", "columns": {"name": ["品名", "品名規格", "名稱"], "quantity": ["數量"],
+         "unit_price": ["單價"], "amount": ["總價", "金額", "小計"]},
+       "ignore_columns": [["備註"]], "stop_labels": ["合計", "總計"]}
+    ]},
+    {"key": "total", "label": "總金額", "type": "money", "target": "total", "locate": [
+      {"strategy": "row", "contains_all": ["合計"]},
+      {"strategy": "anchor", "labels": ["NT", "總計"], "direction": "right"}
+    ]}
+  ]
+}

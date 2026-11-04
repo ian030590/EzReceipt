@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ezreceipt.invalid/schema/receipt-1.0.schema.json",
+  "title": "EzReceipt receipt.captured 1.0",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "event", "receipt_id", "captured_at", "source", "template_id", "template_name", "merchant_name", "merchant_tax_id", "buyer_tax_id", "invoice_number", "date", "time", "currency", "items", "item_count", "subtotal", "tax", "total", "custom_fields", "confidence", "warnings", "image_file"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "event": {"const": "receipt.captured"},
+    "receipt_id": {"type": "string", "format": "uuid"},
+    "captured_at": {"type": "string", "format": "date-time", "pattern": "(Z|[+-][0-9]{2}:[0-9]{2})$"},
+    "source": {"enum": ["tw_einvoice_qr", "local_ocr"]},
+    "template_id": {"type": ["string", "null"]},
+    "template_name": {"type": ["string", "null"]},
+    "merchant_name": {"type": ["string", "null"]},
+    "merchant_tax_id": {"$ref": "#/$defs/tax_id"},
+    "buyer_tax_id": {"$ref": "#/$defs/tax_id"},
+    "invoice_number": {"type": ["string", "null"], "pattern": "^[A-Z]{2}[0-9]{8}$"},
+    "date": {"type": ["string", "null"], "format": "date"},
+    "time": {"type": ["string", "null"], "pattern": "^(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$"},
+    "currency": {"type": "string", "pattern": "^[A-Z]{3}$"},
+    "items": {"type": "array", "items": {"type": "object", "additionalProperties": true,
+      "required": ["name", "quantity", "unit_price", "amount"],
+      "properties": {"name": {"type": "string"}, "quantity": {"$ref": "#/$defs/number"}, "unit_price": {"$ref": "#/$defs/number"}, "amount": {"$ref": "#/$defs/number"}}}},
+    "item_count": {"type": "integer", "minimum": 0},
+    "subtotal": {"$ref": "#/$defs/number"},
+    "tax": {"$ref": "#/$defs/number"},
+    "total": {"$ref": "#/$defs/number"},
+    "custom_fields": {"type": "array", "items": {"type": "object", "additionalProperties": true,
+      "required": ["key", "label", "value"], "properties": {
+        "key": {"type": "string", "pattern": "^[a-z0-9_]+$"}, "label": {"type": "string"},
+        "value": {"type": ["string", "number", "null"]}}}},
+    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+    "warnings": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "image_file": {"type": ["string", "null"]}
+  },
+  "$defs": {
+    "number": {"type": ["number", "null"]},
+    "tax_id": {"type": ["string", "null"], "pattern": "^(?!00000000)[0-9]{8}$"}
+  }
+}
