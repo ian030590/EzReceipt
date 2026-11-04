@@ -15,7 +15,7 @@ import numpy as np
 
 from .._tk import enable_dpi_awareness
 from ..extractors.ocr import OcrEngine, OcrLine, group_rows
-from ..imaging import deskew, detect_document_quad
+from ..imaging import deskew, detect_document_quad, ocr_input
 from ..normalize import parse_date, parse_money
 from .matcher import has_label
 from .model import Template
@@ -268,7 +268,7 @@ def run_annotator(
     ttk.Label(panel, textvariable=status, wraplength=280).pack(fill="x", pady=10)
     annotations, rectangles, lines, result = [], [], [], []
     engine, executor = OcrEngine(), ThreadPoolExecutor(max_workers=1)
-    pending = [(executor.submit(engine.recognize, image), "sample")]
+    pending = [(executor.submit(engine.recognize, ocr_input(image)), "sample")]
     start, draft = None, None
 
     def field_dialog(box: tuple) -> Annotation | None:
@@ -364,7 +364,9 @@ def run_annotator(
                 crop = image[
                     int(y0) : max(int(y0) + 1, int(y1)), int(x0) : max(int(x0) + 1, int(x1))
                 ].copy()
-                pending.append((executor.submit(engine.recognize, crop), annotation.label))
+                pending.append(
+                    (executor.submit(engine.recognize, ocr_input(crop)), annotation.label)
+                )
                 status.set(f"辨識 {annotation.label} 中…")
                 draft = None
         except ValueError as exc:

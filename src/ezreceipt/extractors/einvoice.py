@@ -1,4 +1,4 @@
-"""OpenCV QR decoding and Taiwan Ministry of Finance e-invoice fields."""
+"""ZXing/OpenCV QR decoding and Taiwan Ministry of Finance e-invoice fields."""
 
 import base64
 import logging
@@ -7,7 +7,7 @@ import re
 import cv2
 import numpy as np
 
-from ..imaging import gray
+from ..imaging import gray, resize_long_side
 from ..models import LineItem
 from ..normalize import parse_date, parse_money, parse_tax_id
 from .base import ExtractionResult
@@ -16,11 +16,13 @@ logger = logging.getLogger(__name__)
 _HEADER = re.compile(r"^[A-Z]{2}\d{8}\d{7}\d{4}[0-9A-Fa-f]{16}\d{16}[A-Za-z0-9+/=]{24}(?::|$)")
 
 
-def _recover_big5(text: str) -> str:
-    try:
-        return text.encode("latin-1").decode("big5")
-    except (UnicodeEncodeError, UnicodeDecodeError):
-        return text
+def _decode_item_bytes(raw: bytes, fallback: str) -> str:
+    for encoding in ("utf-8", "cp950"):
+        try:
+            return raw.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return fallback
 
 
 def parse_qr_texts(texts: list[str]) -> ExtractionResult | None:
@@ -51,14 +53,18 @@ def parse_qr_texts(texts: list[str]) -> ExtractionResult | None:
         if encoding == 2:
             try:
                 raw = base64.b64decode(name, validate=True)
-                try:
-                    name = raw.decode("utf-8")
-                except UnicodeDecodeError:
-                    name = raw.decode("big5")
-            except (ValueError, UnicodeDecodeError):
+                name = _decode_item_bytes(raw, name)
+            except ValueError:
                 logger.debug("Invalid base64 item name")
-        elif encoding == 0 or any("\x80" <= char <= "\x9f" for char in name):
-            name = _recover_big5(name)
+        elif encoding in (0, 1):
+            try:
+                raw = name.encode("latin-1")
+            except UnicodeEncodeError:
+                pass
+            else:
+                if any(byte >= 128 for byte in raw):
+                    name = _decode_item_bytes(raw, name)
+        name = re.sub(r"[\x00-\x1f\x7f]", "", name).strip()
         quantity, price = parse_money(qty_text), parse_money(price_text)
         if name and quantity is not None and price is not None:
             items.append(LineItem(name, quantity, price))
@@ -81,10 +87,25 @@ def parse_qr_texts(texts: list[str]) -> ExtractionResult | None:
 
 def detect_qr_strings(image: np.ndarray) -> list[str]:
     image_gray = gray(image)
+    decoded: list[str] = []
+    try:
+        import zxingcpp
+    except ImportError:
+        logger.debug("ZXing is unavailable; trying OpenCV")
+    else:
+        qr_image = (
+            resize_long_side(image_gray, 2400) if max(image_gray.shape[:2]) > 2400 else image_gray
+        )
+        for result in zxingcpp.read_barcodes(qr_image, formats=zxingcpp.BarcodeFormat.QRCode):
+            raw = getattr(result, "bytes", None)
+            value = raw.decode("latin-1") if raw is not None else result.text
+            if value and value not in decoded:
+                decoded.append(value)
+        if any(_HEADER.match(value) for value in decoded):
+            return decoded
     detectors = [cv2.QRCodeDetector()]
     if hasattr(cv2, "QRCodeDetectorAruco"):
         detectors.append(cv2.QRCodeDetectorAruco())
-    decoded: list[str] = []
     for scale in (1, 1.5, 2):
         variant = (
             image_gray

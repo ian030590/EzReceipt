@@ -42,14 +42,15 @@ def template_data():
 @pytest.mark.parametrize(
     "path", sorted((Path(__file__).parent / "fixtures").glob("*.json")), ids=lambda path: path.stem
 )
-def test_acceptance_fixtures(path, validate_payload):
+def test_acceptance_fixtures(path, validate_payload, fixed_today):
     data = json.loads(path.read_text(encoding="utf-8"))
     lines = [OcrLine(**entry) for entry in data["lines"]]
     registry = TemplateRegistry()
     matched = match_template(registry.templates, lines)
-    assert matched.id == data["expected"]["template_id"]
-    extraction = apply_template(matched, lines)
-    assert extraction.report
+    assert (matched.id if matched else None) == data["expected"]["template_id"]
+    if matched:
+        extraction = apply_template(matched, lines)
+        assert extraction.report
     engine = SimpleNamespace(recognize=lambda image: lines)
     result = Pipeline("ocr", engine, registry).process(np.full((1200, 800, 3), 255, np.uint8))
     payload = validate_payload(result)
@@ -67,6 +68,9 @@ def test_acceptance_fixtures(path, validate_payload):
             assert set(expected) <= set(payload["warnings"])
         elif key == "warnings_exclude":
             assert not set(expected) & set(payload["warnings"])
+        elif key == "payload_exclude":
+            serialized = json.dumps(payload, ensure_ascii=False)
+            assert all(value not in serialized for value in expected)
         else:
             assert payload[key] == expected
 
@@ -117,7 +121,7 @@ def test_validation_errors(mutate, match):
 
 def test_discovery_override_copy_and_load(tmp_path, monkeypatch):
     registry = TemplateRegistry()
-    assert len(registry.templates) == 2
+    assert len(registry.templates) == 5
     path = copy_builtin("tw_post_stamp_purchase", tmp_path)
     data = json.loads(path.read_text(encoding="utf-8"))
     data["name"] = "使用者覆寫"

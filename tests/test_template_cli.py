@@ -116,14 +116,18 @@ def test_template_new_routes_without_display(tmp_path, monkeypatch, capsys):
 
 
 def test_template_test_real_pipeline_with_fake_ocr(tmp_path, monkeypatch, capsys):
-    path = tmp_path / "synthetic.jpg"
-    cv2.imencode(".jpg", np.full((1200, 800, 3), 255, np.uint8))[1].tofile(path)
+    path = tmp_path / "synthetic.png"
+    cv2.imencode(".png", np.full((1200, 800, 3), (220, 70, 180), np.uint8))[1].tofile(path)
     lines = [
         line("購買票品證明單", 0.2, 0.1, 0.5),
         line("NT: 500", 0.1, 0.45),
         line("104.05.06-13", 0.76, 0.42),
     ]
-    monkeypatch.setattr("ezreceipt.extractors.ocr.OcrEngine.recognize", lambda self, image: lines)
+    def recognize(self, image):
+        assert np.all(image == 70)
+        return lines
+
+    monkeypatch.setattr("ezreceipt.extractors.ocr.OcrEngine.recognize", recognize)
     assert main(["template", "test", "tw_post_stamp_purchase", str(path)]) == 0
     output = json.loads(capsys.readouterr().out)
     assert output["receipt"]["template_id"] == "tw_post_stamp_purchase"

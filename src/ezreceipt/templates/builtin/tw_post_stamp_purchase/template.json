@@ -5,6 +5,7 @@
   "description": "橫式預印票品證明單，手寫或蓋章填入，無品項表格。",
   "defaults": {"currency": "TWD", "merchant_name": "中華郵政股份有限公司", "tax": 0},
   "match": {
+    "keywords_none": ["高鐵", "車票"],
     "keywords_any": ["購買票品證明單", "票品證明", "本日確經購買", "證明郵局郵戳"],
     "min_any": 1,
     "reference_min_inliers": 25

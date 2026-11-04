@@ -1,9 +1,20 @@
 import json
 import socket
+from datetime import date
 from importlib.resources import files
 
 import jsonschema
 import pytest
+
+
+@pytest.fixture
+def fixed_today(monkeypatch):
+    class FixedDate(date):
+        @classmethod
+        def today(cls):
+            return cls(2026, 11, 5)
+
+    monkeypatch.setattr("ezreceipt.normalize.date", FixedDate)
 
 
 @pytest.fixture(scope="session")

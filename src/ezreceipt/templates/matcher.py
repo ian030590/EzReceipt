@@ -40,16 +40,23 @@ def has_label(text: str, labels: list[str]) -> bool:
 
 
 def match_template(templates: list[Template], lines: list[OcrLine]) -> Template | None:
-    text = "\n".join(line.text for line in lines)
+    text = compact("\n".join(line.text for line in lines))
+
+    def keyword_matches(label: str) -> bool:
+        needle = compact(label)
+        return needle in text or len(needle) >= 5 and label_span(text, needle) is not None
+
     ranked = []
     for template in templates:
         match = template.data.get("match", {})
+        if any(compact(label) in text for label in match.get("keywords_none", [])):
+            continue
         all_labels, any_labels = match.get("keywords_all", []), match.get("keywords_any", [])
         if not all_labels and not any_labels:
             continue
-        if not all(has_label(text, [label]) for label in all_labels):
+        if not all(keyword_matches(label) for label in all_labels):
             continue
-        hits = [label for label in any_labels if has_label(text, [label])]
+        hits = [label for label in any_labels if keyword_matches(label)]
         if len(hits) < match.get("min_any", 1 if any_labels else 0):
             continue
         ranked.append(

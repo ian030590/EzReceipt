@@ -8,6 +8,12 @@ def gray(image: np.ndarray) -> np.ndarray:
     return cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image
 
 
+def ocr_input(image: np.ndarray) -> np.ndarray:
+    channel = image.min(axis=2) if image.ndim == 3 else image
+    blurred = cv2.GaussianBlur(channel, (0, 0), sigmaX=1.0)
+    return cv2.cvtColor(blurred, cv2.COLOR_GRAY2BGR)
+
+
 def resize_long_side(image: np.ndarray, size: int) -> np.ndarray:
     ratio = size / max(image.shape[:2])
     return cv2.resize(

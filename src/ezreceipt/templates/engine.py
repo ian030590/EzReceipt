@@ -10,9 +10,16 @@ from typing import Any
 import numpy as np
 
 from ..extractors.base import ExtractionResult
-from ..extractors.ocr import OcrLine, group_rows, parse_generic, parse_item_row
+from ..extractors.ocr import OcrLine, group_rows, last_money, parse_generic, parse_item_row
 from ..models import CustomField, LineItem
-from ..normalize import parse_date, parse_money, parse_tax_id, parse_time, to_traditional
+from ..normalize import (
+    parse_date,
+    parse_date_detail,
+    parse_money,
+    parse_tax_id,
+    parse_time,
+    to_traditional,
+)
 from .matcher import compact, has_label, label_span
 from .model import Template
 
@@ -41,6 +48,14 @@ def normalize_value(value: Any, field_type: str) -> Any:
         return None
     text = clean_value(str(value))
     if text is None:
+        return None
+    if field_type == "invoice_number":
+        match = re.fullmatch(r"([A-Za-z]{2})\s*-?\s*(\d{8})", text)
+        return "".join(match.groups()).upper() if match else None
+    if field_type == "period":
+        match = re.fullmatch(r"(\d{2,3})\s*年\s*(\d{1,2})\s*[-~]\s*(\d{1,2})\s*月", text)
+        if match and 1 <= int(match[2]) <= int(match[3]) <= 12:
+            return f"{match[1]}年{int(match[2]):02}-{int(match[3]):02}月"
         return None
     parser = {
         "number": parse_money,
@@ -295,19 +310,49 @@ def locate_values(lines: list[OcrLine], locator: dict, field_type: str) -> Itera
                 text = "".join(re.findall(r"[\u3400-\u9fff]+", text))
             yield text
     elif strategy == "row":
+        active = not locator.get("after")
+        selected_rows = []
         for row in rows:
             selected = [
                 line for line in row if "within" not in locator or inside(line, locator["within"])
             ]
             text = " ".join(line.text for line in selected)
+            if not active:
+                if has_label(text, locator["after"]):
+                    active = True
+                continue
+            if has_label(text, locator.get("before", [])):
+                break
             if all(has_label(text, [label]) for label in locator.get("contains_all", [])) and (
                 not locator.get("contains_any") or has_label(text, locator["contains_any"])
             ):
-                yield text
+                normalized = to_traditional(unicodedata.normalize("NFKC", text))
+                if locator.get("date_required") and parse_date(normalized) is None:
+                    continue
+                if "pattern" in locator and not re.search(locator["pattern"], normalized):
+                    continue
+                if "exclude_pattern" in locator and re.search(
+                    locator["exclude_pattern"], normalized
+                ):
+                    continue
+                if field_type == "items":
+                    selected_rows.append(selected)
+                else:
+                    yield last_money(text) if locator.get("last_money") else text
+                if locator.get("first"):
+                    break
+        if field_type == "items":
+            yield [item for row in selected_rows if (item := parse_item_row(row))]
     elif strategy == "regex":
         text = "\n".join(
             " ".join(to_traditional(unicodedata.normalize("NFKC", line.text)) for line in row)
-            for row in rows
+            for row in group_rows(
+                [
+                    line
+                    for line in lines
+                    if "within" not in locator or inside(line, locator["within"])
+                ]
+            )
         )
         for match in re.finditer(locator["pattern"], text):
             yield match.group(locator.get("group", 1))
@@ -325,36 +370,44 @@ def apply_template(
 ) -> TemplateResult:
     values, report, warnings = {}, {}, []
     for spec in template.fields:
-        value, hit = None, None
+        value, hit, date_warnings = None, None, []
         for locator in spec["locate"]:
-            value = next(
-                (
-                    normalized
-                    for raw in locate_values(lines, locator, spec["type"])
-                    if (normalized := normalize_value(raw, spec["type"])) is not None
-                ),
-                None,
-            )
+            for raw in locate_values(lines, locator, spec["type"]):
+                value = normalize_value(raw, spec["type"])
+                if value is not None and "reject_pattern" in spec and re.search(
+                    spec["reject_pattern"], str(value)
+                ):
+                    value = None
+                if value is not None:
+                    if spec["type"] == "date":
+                        _, date_warnings = parse_date_detail(str(raw))
+                    break
             if value is not None:
                 hit = locator["strategy"]
+                if locator.get("warning"):
+                    warnings.append(locator["warning"])
                 break
         if value is None and spec.get("default") is not None:
             value = normalize_value(spec["default"], spec["type"])
             if value is not None:
                 hit = "default"
                 warnings.append(f"template_default_used:{spec['key']}")
-        if value is None:
+                if spec["type"] == "date":
+                    _, date_warnings = parse_date_detail(str(spec["default"]))
+        warnings.extend(date_warnings)
+        if value is None and not spec.get("optional"):
             warnings.append(f"template_field_missing:{spec['key']}")
         values[spec["key"]], report[spec["key"]] = value, hit
-    fields = dict(parse_generic(lines).fields)
+    generic = parse_generic(lines) if template.data.get("generic_fallback", True) else None
+    fields = dict(generic.fields) if generic else {}
     fields.update(
         {
             key: value
             for key, value in template.data.get("defaults", {}).items()
-            if value is not None
+            if value is not None and key != "item_name"
         }
     )
-    custom, item_name = [], None
+    custom, item_name = [], template.data.get("defaults", {}).get("item_name")
     for spec in template.fields:
         value = values[spec["key"]]
         target = spec.get("target", "custom")
@@ -372,6 +425,15 @@ def apply_template(
     )
     if item_name and not template_items:
         fields["items"] = [LineItem(item_name, quantity=1, amount=fields.get("total"))]
+    if (
+        generic
+        and "date_year_inferred" in generic.warnings
+        and not any(
+            spec.get("target") == "date" and values[spec["key"]] for spec in template.fields
+        )
+        and fields.get("date") == generic.fields.get("date")
+    ):
+        warnings.append("date_year_inferred")
     fields.update(template_id=template.id, template_name=template.name, custom_fields=custom)
     confidence = 0.75 - 0.1 * sum(fields.get(key) is None for key in ("date", "total"))
     return TemplateResult(fields, confidence, warnings, report)

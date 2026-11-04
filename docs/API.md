@@ -75,6 +75,19 @@ body 為 UTF-8 JSON，一次一筆收據。接收端完成保存後，回覆任�
 接收端應使用 `template_id` 與 `key` 作為識別碼。
 這些欄位的來源是 OCR 模板，`source` 仍為 `local_ocr`；QR 合併成功時為 `tw_einvoice_qr`。
 
+內建模板的自訂欄位如下；選填但未讀到時仍為 null，且沒有缺欄警告。
+
+| template_id | custom_fields 的 key、型別與意義 |
+| --- | --- |
+| `tw_post_stamp_purchase` | `serial_no` 證明單號碼、`buyer` 購買人、`post_office` 郵局（皆為文字） |
+| `tw_no_uniform_invoice_receipt` | `buyer` 買受人（文字） |
+| `tw_payment_receipt` | `payer` 付款單位（文字）；選填 `withholding_tax` 所得稅額、`nhi_premium` 補充健保費、`net_amount` 實領（整數 TWD） |
+| `tw_cash_register_invoice` | `period` 期別（文字，例如 `115年01-02月`） |
+| `tw_thsr_ticket_proof` | `from_station` 起程站、`to_station` 到達站、`ticket_no` 卡號／票號；選填 `control_no` 控管編號、`ticket_type` 票證類別（皆為文字，保留完整數字） |
+
+領款模板的 merchant_name 為領款人、品項為用途，不擷取身分證字號、電話、地址或帳號。
+高鐵模板的 date/time 只取乘車日期；列印日期與付款日期不作後備來源。
+
 ## 來源、優先順序與警告
 
 `tw_einvoice_qr` 表示臺灣電子發票 QR 解碼成功。發票號碼、日期、統編、
@@ -88,12 +101,15 @@ QR 品項不完整時，若 OCR 有更多品項則採用 OCR 品項清單。
 | `einvoice_items_incomplete` | 解出的 QR 品項少於宣告總數，可能只拍到其中一個 QR |
 | `total_missing` | 找不到總額，`total` 為 null |
 | `date_missing` | 找不到有效日期，`date` 為 null |
+| `date_year_inferred` | 年月日格式的兩位民國年 YY 小於 60，補上遺失的百位 1 後落在當年民國年 ±1 年內；例如當年為 115 年時，15年6月30日輸出 2026-06-30 |
 | `ocr_failed` | 自動模式的 OCR 執行失敗，但 QR 仍辨識成功 |
 | `image_save_failed` | 使用者啟用影像保存，但編碼或寫入失敗 |
 | `total_from_items` | 原總額缺少，已將可讀的品項金額加總作為總額 |
+| `total_from_currency_mark` | 沒有標示總額；所有 NT$／NT／新台幣／新臺幣金額只有一種不同數值，採用該值 |
+| `total_from_payment` | 收銀機模板總計、項數列、應收金額與銷售總額皆不可讀，改以現金列金額作為總額 |
 | `items_total_mismatch` | 可讀品項金額合計與總額相差超過 0.5 元；保留原總額 |
 | `cross_check_mismatch:<key>` | 模板欄位與核對欄位不同；保留主欄位 |
-| `template_field_missing:<key>` | 該模板欄位未讀到；標準欄位之後可能由通用規則補足 |
+| `template_field_missing:<key>` | 該模板非 optional 欄位未讀到；啟用通用補值的模板可能之後補足 |
 | `template_default_used:<key>` | 已匹配模板，欄位未讀到而採用欄位的 default |
 
 QR 資料完整時分數為 0.98，品項不完整為 0.8。
@@ -101,6 +117,8 @@ QR 資料完整時分數為 0.98，品項不完整為 0.8。
 最後限制在 0.05 到 0.9。請依用途人工覆核低分或有警告的收據。
 模板分數為 0.75，日期、總額各缺少時減 0.1（品項補算總額前評分）。
 品項補算與金額核對在 pipeline 合併後統一執行；不會改寫已讀到的總額。
+品項合計等於 subtotal，且 subtotal + tax 等於 total 時，視為未稅品項與含稅總額相符，
+不產生 `items_total_mismatch`。
 接收端應保留未知警告代碼，以便未來版本增加警告。
 
 ## 完整範例

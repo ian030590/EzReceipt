@@ -30,6 +30,13 @@ python -m venv .venv
 RapidOCR 3.10 以上、4.0 以下版本。EzReceipt 只載入套件內現有模型，不會下載模型；
 模型缺少時會記錄錯誤，QR 辨識仍可使用。
 
+QR 優先使用 `zxing-cpp>=2.2,<4`（Apache-2.0，Win/Linux/macOS wheels，離線解碼）；
+未安裝或未找到電子發票標頭時改用 OpenCV。支援 Big5、UTF-8 與 Base64 品名。
+OCR 輸入先取 B/G/R 最小通道並以 sigma 1.0 輕微模糊，以改善彩色點陣列印；
+文件校正、對齊與 QR 輸入不套用這個 OCR 轉換。
+收據必須正向放置。文件校正可處理小幅傾斜；不支援上下顛倒的收據。
+OCR 預設停用逐行 180° 方向分類（`use_cls=False`），避免手寫金額被翻轉後誤讀。
+
 OpenCV 必須使用 `opencv-python-headless`，不要另外安裝 `opencv-python`，
 兩者共用 `cv2`，同時安裝會衝突。預覽使用 Tkinter 與 Pillow，
 不使用 OpenCV 視窗。部分 Linux 發行版需另外安裝系統的 Tk 套件；
@@ -88,6 +95,7 @@ OCR 及規則推測可能讀錯、漏讀，請檢查 `confidence`、`warnings` �
 手寫字、皺摺、反光、特殊排版、多行品項名稱與非常小的字可能降低準確度。
 品項金額存在但總額缺少時，會加總品項並標示 `total_from_items`；
 品項加總與總額相差超過 0.5 元時，會標示 `items_total_mismatch`。
+若品項合計等於未稅銷售額，且加上營業稅後等於總額，則視為相符。
 
 產生不含真實資料的測試電子發票：
 
@@ -99,7 +107,14 @@ ezreceipt scan output/sample.png --extractor einvoice
 
 ## 收據模板
 
-預設啟用兩個內建模板：中華郵政「購買票品證明單」與「免用統一發票收據」。
+預設啟用五個內建模板：
+
+- `tw_post_stamp_purchase`：中華郵政購買票品證明單。
+- `tw_no_uniform_invoice_receipt`：免用統一發票收據。
+- `tw_payment_receipt`：領據／領款收據，含付款單位、用途及選填扣款金額。
+- `tw_cash_register_invoice`：二聯式／三聯式收銀機統一發票，含期別及列印金額。
+- `tw_thsr_ticket_proof`：台灣高鐵電子車票／購票證明，以乘車日期為準。
+
 支援民國日期、中文金額格、買賣方統編區分與自訂欄位；手寫數字仍可能誤讀。
 可複製內建模板調整，也可用 Tk 標註圖片建立自己的格式。
 

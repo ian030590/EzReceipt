@@ -1,0 +1,51 @@
+{
+  "format_version": 1,
+  "id": "tw_cash_register_invoice",
+  "name": "收銀機統一發票",
+  "description": "二聯式／三聯式收銀機發票，含點陣列印與下方空白手填欄。",
+  "defaults": {"currency": "TWD"},
+  "generic_fallback": false,
+  "match": {"keywords_any": ["收銀機統一發票", "收銀機"], "min_any": 1},
+  "notes": "金額只讀取第一個列印欄位；略過底部空白手填欄。總額依總計、項數列、應收金額或銷售總額、現金列依序回退。日期欄不可讀時採用頂部45%內第一個有效日期列及其時間。品項為盡力辨識，無法讀到品名時不猜測。",
+  "fields": [
+    {"key": "invoice_number", "label": "發票號碼", "type": "invoice_number", "target": "invoice_number", "locate": [
+      {"strategy": "regex", "pattern": "(?i)([A-Z]{2}\\s*-?\\s*\\d{8})", "within": [0, 0, 1, 0.2]}
+    ]},
+    {"key": "period", "label": "期別", "type": "period", "target": "custom", "locate": [
+      {"strategy": "regex", "pattern": "(\\d{2,3}\\s*年\\s*\\d{1,2}\\s*[-~]\\s*\\d{1,2}\\s*月)"}
+    ]},
+    {"key": "date", "label": "日期", "type": "date", "target": "date", "locate": [
+      {"strategy": "row", "contains_all": ["日期"], "first": true},
+      {"strategy": "row", "within": [0, 0, 1, 0.45], "date_required": true, "first": true}
+    ]},
+    {"key": "time", "label": "時間", "type": "time", "target": "time", "locate": [
+      {"strategy": "row", "contains_all": ["日期"], "date_required": true, "first": true},
+      {"strategy": "row", "within": [0, 0, 1, 0.45], "date_required": true, "first": true}
+    ]},
+    {"key": "merchant_tax_id", "label": "賣方統編", "type": "tax_id", "target": "merchant_tax_id", "locate": [
+      {"strategy": "anchor", "labels": ["統編", "統一編號"], "direction": "right"},
+      {"strategy": "regex", "pattern": "日期[^\\n]*?#\\s*(\\d{8})(?!\\d)"}
+    ]},
+    {"key": "buyer_tax_id", "label": "買受人統編", "type": "tax_id", "target": "buyer_tax_id", "locate": [
+      {"strategy": "regex", "pattern": "買受人[ \\t]*[:：]?[ \\t]*(\\d{8})(?!\\d)"}
+    ]},
+    {"key": "merchant_name", "label": "商家名稱", "type": "text", "target": "merchant_name", "locate": [
+      {"strategy": "row", "after": ["買受人為非營業人者本聯作廢"], "before": ["統編", "統一編號", "地址", "TEL", "日期"], "pattern": "^[^\\d\\n]*[\\u3400-\\u9fff][^\\d\\n]*$", "exclude_pattern": "市|路|號", "first": true}
+    ]},
+    {"key": "subtotal", "label": "銷售額", "type": "money", "target": "subtotal", "locate": [
+      {"strategy": "row", "contains_all": ["銷售額"], "last_money": true, "first": true}
+    ]},
+    {"key": "tax", "label": "營業稅", "type": "money", "target": "tax", "locate": [
+      {"strategy": "row", "contains_all": ["營業稅"], "pattern": "^\\s*營.稅", "last_money": true, "first": true}
+    ]},
+    {"key": "total", "label": "總計", "type": "money", "target": "total", "locate": [
+      {"strategy": "row", "contains_all": ["總計"], "last_money": true, "first": true},
+      {"strategy": "row", "pattern": "\\d+\\s*項", "last_money": true},
+      {"strategy": "row", "contains_any": ["應收金額", "銷售總額"], "last_money": true},
+      {"strategy": "row", "contains_all": ["現金"], "last_money": true, "first": true, "warning": "total_from_payment"}
+    ]},
+    {"key": "items", "label": "品項", "type": "items", "target": "items", "optional": true, "locate": [
+      {"strategy": "row", "after": ["簽帳卡號碼"], "before": ["銷售額"]}
+    ]}
+  ]
+}

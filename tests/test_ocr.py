@@ -73,7 +73,7 @@ def test_wrapper():
     assert OcrEngine(engine=lambda image: None).recognize(np.zeros((10, 10, 3))) == []
 
 
-def test_nearest_amount_and_separate_date_cells():
+def test_last_amount_and_separate_date_cells():
     result = parse_generic(
         [
             line("合成店", 0.05),
@@ -85,7 +85,7 @@ def test_nearest_amount_and_separate_date_cells():
             line("999", 0.7, x=0.8, right=0.9),
         ]
     )
-    assert result.fields["total"] == 100
+    assert result.fields["total"] == 999
     assert result.fields["date"] == "2024-11-04"
     assert result.fields.get("tax") is None
 

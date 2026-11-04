@@ -9,7 +9,7 @@ import numpy as np
 
 from .extractors import einvoice
 from .extractors.ocr import OcrEngine, TemplateHook, resolve_fields
-from .imaging import preprocess_ocr
+from .imaging import ocr_input, preprocess_ocr
 from .models import Receipt
 from .templates.align import match_reference
 from .templates.engine import apply_template
@@ -26,7 +26,12 @@ def validate_totals(fields: dict[str, Any], warnings: list[str]) -> None:
         if fields.get("total") is None:
             fields["total"] = amount
             warnings.append("total_from_items")
-        elif abs(fields["total"] - amount) > 0.5:
+        elif abs(fields["total"] - amount) > 0.5 and not (
+            fields.get("subtotal") is not None
+            and fields.get("tax") is not None
+            and abs(fields["subtotal"] - amount) <= 0.5
+            and abs(fields["subtotal"] + fields["tax"] - fields["total"]) <= 0.5
+        ):
             warnings.append("items_total_mismatch")
 
 
@@ -81,7 +86,7 @@ class Pipeline:
                 alignment = match_reference(candidates, image)
                 if alignment:
                     image = alignment.image
-                lines = self.ocr_engine.recognize(image)
+                lines = self.ocr_engine.recognize(ocr_input(image))
                 chosen = (
                     alignment.template
                     if alignment

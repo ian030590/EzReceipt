@@ -20,7 +20,7 @@ SCALAR_TARGETS = {
     "currency",
 }
 TARGETS = SCALAR_TARGETS | {"items", "item_name", "custom", "check"}
-TYPES = {"text", "number", "money", "date", "time", "tax_id", "items"}
+TYPES = {"text", "number", "money", "date", "time", "tax_id", "items", "invoice_number", "period"}
 DIRECTIONS = {
     "right",
     "below",
@@ -86,6 +86,7 @@ def validate_template(data: Any) -> None:
             "reference_image",
             "notes",
             "fields",
+            "generic_fallback",
         },
         "template",
     )
@@ -96,7 +97,9 @@ def validate_template(data: Any) -> None:
     for key in ("name", "description", "notes"):
         if not isinstance(data.get(key, ""), str) or key == "name" and not data.get(key):
             raise ValueError(f"{key}: expected text")
-    defaults = _object(data.get("defaults", {}), SCALAR_TARGETS, "defaults")
+    if "generic_fallback" in data and type(data["generic_fallback"]) is not bool:
+        raise ValueError("generic_fallback: expected boolean")
+    defaults = _object(data.get("defaults", {}), SCALAR_TARGETS | {"item_name"}, "defaults")
     for key, value in defaults.items():
         if key in {"total", "subtotal", "tax"}:
             valid = isinstance(value, (float, int)) and not isinstance(value, bool)
@@ -107,10 +110,10 @@ def validate_template(data: Any) -> None:
             raise ValueError(f"defaults.{key}: invalid scalar value")
     match = _object(
         data.get("match", {}),
-        {"keywords_all", "keywords_any", "min_any", "reference_min_inliers"},
+        {"keywords_all", "keywords_any", "keywords_none", "min_any", "reference_min_inliers"},
         "match",
     )
-    for key in ("keywords_all", "keywords_any"):
+    for key in ("keywords_all", "keywords_any", "keywords_none"):
         _labels(match.get(key, []), f"match.{key}")
     for key, default in (
         ("min_any", 1 if match.get("keywords_any") else 0),
@@ -135,7 +138,21 @@ def validate_template(data: Any) -> None:
     keys = set()
     for index, spec in enumerate(fields):
         where = f"fields[{index}]"
-        _object(spec, {"key", "label", "type", "target", "locate", "default", "cross_check"}, where)
+        _object(
+            spec,
+            {
+                "key", "label", "type", "target", "locate", "default", "cross_check",
+                "optional", "reject_pattern",
+            },
+            where,
+        )
+        if "reject_pattern" in spec:
+            try:
+                re.compile(spec["reject_pattern"])
+            except (TypeError, re.error) as exc:
+                raise ValueError(f"{where}.reject_pattern: invalid regex: {exc}") from exc
+        if "optional" in spec and type(spec["optional"]) is not bool:
+            raise ValueError(f"{where}.optional: expected boolean")
         key = spec.get("key")
         if not isinstance(key, str) or not re.fullmatch(r"[a-z0-9_]+", key):
             raise ValueError(f"{where}.key: expected [a-z0-9_]+")
@@ -187,8 +204,19 @@ def validate_locator(locator: Any, where: str) -> None:
             "collect",
             "stop_labels",
         },
-        "row": {"contains_all", "contains_any", "within"},
-        "regex": {"pattern", "group"},
+        "row": {
+            "contains_all",
+            "contains_any",
+            "within",
+            "after",
+            "before",
+            "pattern",
+            "exclude_pattern",
+            "last_money",
+            "first",
+            "date_required",
+        },
+        "regex": {"pattern", "group", "within"},
         "table": {"columns", "stop_labels", "ignore_columns"},
     }
     if (
@@ -198,7 +226,11 @@ def validate_locator(locator: Any, where: str) -> None:
     ):
         raise ValueError(f"{where}: unknown locate strategy")
     strategy = locator["strategy"]
-    _object(locator, options[strategy] | {"strategy"}, f"{where}.{strategy}")
+    _object(locator, options[strategy] | {"strategy", "warning"}, f"{where}.{strategy}")
+    if "warning" in locator and (
+        not isinstance(locator["warning"], str) or not locator["warning"].strip()
+    ):
+        raise ValueError(f"{where}.warning: expected nonempty text")
     for key in ("box", "within"):
         if key in locator:
             _box(locator[key], f"{where}.{key}")
@@ -206,9 +238,19 @@ def validate_locator(locator: Any, where: str) -> None:
         raise ValueError(f"{where}: region requires box")
     if "cjk_only" in locator and type(locator["cjk_only"]) is not bool:
         raise ValueError(f"{where}.cjk_only: expected boolean")
-    for key in ("labels", "skip", "stop_labels", "contains_all", "contains_any"):
+    for key in ("labels", "skip", "stop_labels", "contains_all", "contains_any", "after", "before"):
         if key in locator:
             _labels(locator[key], f"{where}.{key}")
+    if strategy == "row":
+        for key in ("last_money", "first", "date_required"):
+            if key in locator and type(locator[key]) is not bool:
+                raise ValueError(f"{where}.{key}: expected boolean")
+        for key in ("pattern", "exclude_pattern"):
+            if key in locator:
+                try:
+                    re.compile(locator[key])
+                except (TypeError, re.error) as exc:
+                    raise ValueError(f"{where}.{key}: invalid regex: {exc}") from exc
     if strategy == "anchor":
         if not locator.get("labels"):
             raise ValueError(f"{where}: anchor requires labels")

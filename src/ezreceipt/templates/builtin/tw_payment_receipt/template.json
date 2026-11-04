@@ -1,0 +1,43 @@
+{
+  "format_version": 1,
+  "id": "tw_payment_receipt",
+  "name": "領據／領款收據",
+  "description": "預印領款表單，支援打字、手寫金額及中文大寫金額。",
+  "defaults": {"currency": "TWD"},
+  "generic_fallback": false,
+  "match": {
+    "keywords_any": ["領款收據", "領據", "茲收到", "茲領到", "茲收訖", "領款人"],
+    "min_any": 2
+  },
+  "notes": "僅擷取付款單位、領款人、用途、日期與金額。不擷取身分證字號、電話、地址、帳號；停用通用欄位補值以避免個資流入 payload。",
+  "fields": [
+    {"key": "total", "label": "金額", "type": "money", "target": "total", "locate": [
+      {"strategy": "regex", "pattern": "新[台臺]幣\\s*[:：]?\\s*\\$?\\s*([\\d,]+)\\s*元"},
+      {"strategy": "anchor", "labels": ["新台幣", "新臺幣"], "direction": "right", "stop_labels": ["元整", "元"]}
+    ]},
+    {"key": "date", "label": "日期", "type": "date", "target": "date", "locate": [
+      {"strategy": "row", "contains_all": ["年", "月", "日"], "within": [0, 0, 1, 0.35], "first": true}
+    ]},
+    {"key": "payer", "label": "付款單位", "type": "text", "target": "custom", "reject_pattern": "同上|相異|地址|戶籍|通訊|電話|身分證|[A-Z][12]\\d{8}|09\\d{8}|0\\d{1,2}-?\\d{6,8}|[市縣區鄉鎮].*[路街道巷弄].*\\d+.*號", "locate": [
+      {"strategy": "regex", "pattern": "(?m)(?:茲收到|茲領到|茲收訖)[ \\t]*([^\\n]*?)(?:新[台臺]幣|$)"}
+    ]},
+    {"key": "merchant_name", "label": "領款人", "type": "text", "target": "merchant_name", "reject_pattern": "同上|相異|地址|戶籍|通訊|電話|身分證|[A-Z][12]\\d{8}|09\\d{8}|0\\d{1,2}-?\\d{6,8}|[市縣區鄉鎮].*[路街道巷弄].*\\d+.*號", "locate": [
+      {"strategy": "anchor", "labels": ["領款人", "具領人", "立據人", "收款人"], "direction": "right", "skip": ["簽章", "蓋章", "身分證字號", "電話", "地址", "帳號"], "skip_digits": true, "stop_labels": ["簽章", "蓋章", "身分證字號", "電話", "地址", "帳號"]}
+    ]},
+    {"key": "item_name", "label": "用途", "type": "text", "target": "item_name", "default": "領款", "reject_pattern": "同上|相異|地址|戶籍|通訊|電話|身分證|[A-Z][12]\\d{8}|09\\d{8}|0\\d{1,2}-?\\d{6,8}|[市縣區鄉鎮].*[路街道巷弄].*\\d+.*號", "locate": [
+      {"strategy": "anchor", "labels": ["用途說明", "事由", "摘要", "用途"], "direction": "right", "max_gap": 0.5, "skip": ["同上", "相異", "地址"]}
+    ]},
+    {"key": "withholding_tax", "label": "所得稅額", "type": "money", "target": "custom", "optional": true, "locate": [
+      {"strategy": "regex", "pattern": "所得稅額[ \\t]*[:：]?[ \\t]*\\$[ \\t]*([\\d,]+)"},
+      {"strategy": "regex", "pattern": "所得稅額[ \\t]*[:：]?[ \\t]*([\\d,]+)"}
+    ]},
+    {"key": "nhi_premium", "label": "補充健保費", "type": "money", "target": "custom", "optional": true, "locate": [
+      {"strategy": "regex", "pattern": "補充健保費[ \\t]*[:：]?[ \\t]*\\$[ \\t]*([\\d,]+)"},
+      {"strategy": "regex", "pattern": "補充健保費[ \\t]*[:：]?[ \\t]*([\\d,]+)"}
+    ]},
+    {"key": "net_amount", "label": "實領", "type": "money", "target": "custom", "optional": true, "locate": [
+      {"strategy": "regex", "pattern": "實領[ \\t]*[:：]?[ \\t]*\\$[ \\t]*([\\d,]+)"},
+      {"strategy": "regex", "pattern": "實領[ \\t]*[:：]?[ \\t]*([\\d,]+)"}
+    ]}
+  ]
+}

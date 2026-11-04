@@ -53,37 +53,75 @@ def _numeric_text(text: str) -> str:
     )
 
 
+def _datetime_text(text: str) -> str:
+    text = _numeric_text(text)
+    return re.sub(
+        r"(?<!\d)(\d{4}([-/.])\d{2}\2\d{2})(\d{2}:\d{2}(?::\d{2})?)(?!\d)",
+        r"\1T\3",
+        text,
+    )
+
+
 def parse_date(text: str) -> str | None:
-    text = re.sub(r"\s+(?=\d{1,2}\s*:)", "T", _numeric_text(text))
+    return parse_date_detail(text)[0]
+
+
+def parse_date_detail(text: str) -> tuple[str | None, list[str]]:
+    text = re.sub(r"\s+(?=\d{1,2}\s*:)", "T", _datetime_text(text))
     text = re.sub(r"(?<=[年月])\s*[(（|lI!\]】](?=\d)", "1", text)
     text = re.sub(r"\s+", "", text)
-    pattern = r"(?<!\d)(\d{2,4})[-/.年](\d{1,2})[-/.月](\d{1,2})日?(?!\d)"
-    candidates = [m.groups() for m in re.finditer(pattern, text)]
+    pattern = r"(?<!\d)(\d{2,4})([-/.])(\d{1,2})\2(\d{1,2})(?!\d)"
+    candidates = []
+    for match in re.finditer(pattern, text):
+        year, separator, month, day = match.groups()
+        western_short = separator in "-/" and (
+            re.match(r"T?\d{1,2}:\d{2}", text[match.end() :]) is not None
+            or re.search(r"日期|date", text[: match.start()], re.I) is not None
+        )
+        candidates.append((year, month, day, western_short, False))
     candidates.extend(
-        m.groups() for m in re.finditer(r"(?<!\d)(\d{2,3})\.(\d{1,2})\.(\d{2})\d+", text)
+        (*m.groups(), False, m[0].endswith("日"))
+        for m in re.finditer(r"(?<!\d)(\d{2,4})年(\d{1,2})月(\d{1,2})日?(?!\d)", text)
+    )
+    candidates.extend(
+        (*m.groups(), False, False)
+        for m in re.finditer(r"(?<!\d)(\d{2,3})\.(\d{1,2})\.(\d{2})\d+", text)
     )
     for match in re.finditer(r"(?<!\d)(\d{7,8})(?!\d)", text):
         digits = match[0]
-        candidates.append((digits[:-4], digits[-4:-2], digits[-2:]))
-    for year_text, month, day in candidates:
+        candidates.append((digits[:-4], digits[-4:-2], digits[-2:], False, False))
+    current_year = date.today().year
+    roc_year = current_year - 1911
+    for year_text, month, day, western_short, year_marked in candidates:
         year = int(year_text)
-        if len(year_text) <= 3:
-            if not 60 <= year <= date.today().year - 1911 + 1:
+        warnings = []
+        if len(year_text) == 2 and western_short and year <= current_year % 100 + 1:
+            year += 2000
+        elif (
+            year_marked
+            and len(year_text) == 2
+            and year < 60
+            and roc_year - 1 <= year + 100 <= roc_year + 1
+        ):
+            year += 100 + 1911
+            warnings.append("date_year_inferred")
+        elif len(year_text) <= 3:
+            if not 60 <= year <= roc_year + 1:
                 continue
             year += 1911
-        elif not 1990 <= year <= date.today().year + 1:
+        elif not 1990 <= year <= current_year + 1:
             continue
         try:
-            return date(year, int(month), int(day)).isoformat()
+            return date(year, int(month), int(day)).isoformat(), warnings
         except ValueError:
             continue
-    return None
+    return None, []
 
 
 def parse_time(text: str) -> str | None:
     match = re.search(
         r"(?<!\d)(\d{1,2})\s*:\s*(\d{2})(?:\s*:\s*(\d{2}))?(?![\d:])",
-        _numeric_text(text),
+        _datetime_text(text),
     )
     if match:
         hour, minute, second = (int(value or 0) for value in match.groups())

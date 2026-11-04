@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "id": "tw_thsr_ticket_proof",
+  "name": "台灣高鐵電子車票證明／購票證明",
+  "description": "高鐵電子車票與購票證明，日期以乘車日期為準。",
+  "defaults": {"merchant_name": "台灣高速鐵路股份有限公司", "currency": "TWD", "item_name": "高鐵車票"},
+  "generic_fallback": false,
+  "match": {
+    "keywords_any": ["台灣高鐵電子車票證明", "電子購票證明", "高鐵", "THSR", "TAIWAN HIGH SPEED RAIL"],
+    "min_any": 2
+  },
+  "notes": "只採用乘車日期，不以列印日期或付款日期補值；統一編號為買方。",
+  "fields": [
+    {"key": "date", "label": "乘車日期", "type": "date", "target": "date", "locate": [
+      {"strategy": "row", "contains_all": ["乘車日期"], "first": true}
+    ]},
+    {"key": "time", "label": "乘車時間", "type": "time", "target": "time", "locate": [
+      {"strategy": "row", "contains_all": ["乘車日期"], "first": true}
+    ]},
+    {"key": "total", "label": "票價", "type": "money", "target": "total", "locate": [
+      {"strategy": "row", "contains_all": ["票價"], "last_money": true, "first": true}
+    ]},
+    {"key": "subtotal", "label": "銷售額", "type": "money", "target": "subtotal", "locate": [
+      {"strategy": "row", "contains_all": ["銷售額"], "last_money": true, "first": true}
+    ]},
+    {"key": "tax", "label": "營業稅額", "type": "money", "target": "tax", "locate": [
+      {"strategy": "row", "contains_all": ["營業稅額"], "last_money": true, "first": true}
+    ]},
+    {"key": "buyer_tax_id", "label": "買方統一編號", "type": "tax_id", "target": "buyer_tax_id", "locate": [
+      {"strategy": "anchor", "labels": ["統一編號"], "direction": "right"}
+    ]},
+    {"key": "from_station", "label": "起程站", "type": "text", "target": "custom", "locate": [
+      {"strategy": "anchor", "labels": ["起程站"], "direction": "right"}
+    ]},
+    {"key": "to_station", "label": "到達站", "type": "text", "target": "custom", "locate": [
+      {"strategy": "anchor", "labels": ["到達站"], "direction": "right"}
+    ]},
+    {"key": "ticket_no", "label": "卡號／票號", "type": "text", "target": "custom", "locate": [
+      {"strategy": "anchor", "labels": ["卡號/票號", "卡號", "票號"], "direction": "right"}
+    ]},
+    {"key": "control_no", "label": "控管編號", "type": "text", "target": "custom", "optional": true, "locate": [
+      {"strategy": "anchor", "labels": ["控管編號"], "direction": "right"}
+    ]},
+    {"key": "ticket_type", "label": "票證類別", "type": "text", "target": "custom", "optional": true, "locate": [
+      {"strategy": "anchor", "labels": ["票證類別"], "direction": "right"}
+    ]}
+  ]
+}
