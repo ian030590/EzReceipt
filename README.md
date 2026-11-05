@@ -62,8 +62,10 @@ ezreceipt cameras
 ezreceipt watch --camera 0 --width 1920 --height 1080 --backend auto --stdout
 ezreceipt watch --source demo.mp4 --no-preview --jsonl output/receipts.jsonl
 ezreceipt watch --save-images captures --dedupe-window 600
+ezreceipt watch --save-pdf output/pdf
 ezreceipt scan sample.png --extractor einvoice
 ezreceipt scan first.jpg second.jpg --extractor ocr --jsonl output/receipts.jsonl
+ezreceipt scan photo.jpg --save-pdf output/pdf
 ```
 
 `watch` 未指定輸出時使用 stdout，每筆一行 JSON。
@@ -72,6 +74,15 @@ ezreceipt scan first.jpg second.jpg --extractor ocr --jsonl output/receipts.json
 `watch --dedupe-window 0` 可停用同一工作階段的重複辨識過濾。
 Windows 的 `--backend` 可選 `auto`、`msmf` 或 `dshow`；`auto` 先嘗試 MSMF 再嘗試 DSHOW。
 Ctrl+C 會停止擷取，並等待已排入佇列的辨識與傳送完成。
+
+`--save-pdf DIR` 會在輸出 JSON 的同時，把每張收據另存成一頁 PDF：
+自動裁切收據範圍、校正傾斜與透視，並把紙張背景轉為純白；
+字跡、淡色熱感紙字、印章顏色與 QR Code 會保留。
+檔名格式與 `--save-images` 相同（`日期-時間_收據ID前8碼.pdf`），路徑寫入 `pdf_file`。
+只有辨識成功且非重複的收據會輸出 PDF。頁面以 200 DPI 計算尺寸，最長不超過 A4。
+找不到紙張邊緣（例如白紙放在淺色桌面）時，改依印刷內容裁切，不做透視校正；
+淺色桌面加上明顯陰影可能誤判紙張範圍，建議使用深色桌墊與均勻照明。
+儲存失敗時收據仍會送出，並加上 `pdf_save_failed` 警告；`scan` 的結束碼為 1。
 
 可用環境變數設定 webhook：
 
@@ -136,16 +147,26 @@ ezreceipt scan sample.jpg --no-templates
 ## Python 使用方式
 
 ```python
-from ezreceipt import JsonlSink, Pipeline, ReceiptScanner, WebhookSink, scan_image
+from ezreceipt import (
+    JsonlSink,
+    Pipeline,
+    ReceiptScanner,
+    WebhookSink,
+    save_receipt_pdf,
+    scan_image,
+)
 
 receipt = scan_image("sample.png", mode="auto")
 if receipt is not None:
     WebhookSink("http://localhost:8000/receipts").send(receipt)
 
+save_receipt_pdf(image_bgr, "output/receipt.pdf")  # image_bgr 為 NumPy BGR 陣列
+
 scanner = ReceiptScanner(
     pipeline=Pipeline(mode="auto"),
     sinks=[JsonlSink("output/receipts.jsonl")],
     on_receipt=lambda receipt: None,  # 在此處理已辨識的收據
+    save_pdf_dir="output/pdf",
 )
 scanner.run(preview=True)
 ```
@@ -163,8 +184,8 @@ scanner.run(preview=True)
 ## 隱私與儲存
 
 除了使用者設定的 webhook，辨識過程不會對外連線。
-程式不會預設儲存照片或辨識紀錄；指定 `--save-images` 或 `--jsonl`
-才會寫入對應目錄。建立模板時會將參考照片與標註存入指定的 `--templates-dir`。
+程式不會預設儲存照片、PDF 或辨識紀錄；指定 `--save-images`、`--save-pdf`
+或 `--jsonl` 才會寫入對應目錄。建立模板時會將參考照片與標註存入指定的 `--templates-dir`。
 範例接收器也只寫入 argv 指定的 JSONL 路徑。
 Webhook 重試與去重只保存在記憶體，沒有持久化待送佇列；傳送失敗會寫入日誌。
 需要保留可重送的紀錄時，請同時使用 `--jsonl`。

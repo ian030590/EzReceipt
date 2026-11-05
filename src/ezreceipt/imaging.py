@@ -1,7 +1,17 @@
 """Image sizing, document geometry and OCR preparation."""
 
+from pathlib import Path
+
 import cv2
 import numpy as np
+
+
+def read_image(path: str | Path) -> np.ndarray:
+    data = np.fromfile(path, dtype=np.uint8)
+    image = cv2.imdecode(data, cv2.IMREAD_COLOR) if data.size else None
+    if image is None:
+        raise ValueError(f"Cannot read image: {path}")
+    return image
 
 
 def gray(image: np.ndarray) -> np.ndarray:

@@ -67,6 +67,7 @@ class Receipt:
     confidence: float = 0.5
     warnings: list[str] = field(default_factory=list)
     image_file: str | None = None
+    pdf_file: str | None = None
 
     def __post_init__(self) -> None:
         if self.source not in {"tw_einvoice_qr", "local_ocr"}:

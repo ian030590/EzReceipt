@@ -13,11 +13,16 @@ import numpy as np
 from .camera import FrameSource
 from .dedupe import Deduplicator
 from .models import Receipt
+from .pdf import save_receipt_pdf
 from .pipeline import Pipeline
 from .sinks import Sink
 from .trigger import AutoTrigger, TriggerConfig, TriggerUpdate
 
 logger = logging.getLogger(__name__)
+
+
+def capture_name(receipt: Receipt, suffix: str) -> str:
+    return f"{receipt.captured_at:%Y%m%d-%H%M%S}_{receipt.receipt_id[:8]}{suffix}"
 
 
 class ReceiptScanner:
@@ -35,6 +40,7 @@ class ReceiptScanner:
         width: int = 1920,
         height: int = 1080,
         backend: str = "auto",
+        save_pdf_dir: str | Path | None = None,
     ) -> None:
         self.frame_source = (
             FrameSource(source, width, height, backend)
@@ -46,6 +52,7 @@ class ReceiptScanner:
         self.trigger = AutoTrigger(trigger_config)
         self.dedupe = Deduplicator(dedupe_window_s)
         self.save_images_dir = Path(save_images_dir) if save_images_dir is not None else None
+        self.save_pdf_dir = Path(save_pdf_dir) if save_pdf_dir is not None else None
         self.on_receipt, self.on_status = on_receipt, on_status
         self._stop = threading.Event()
         self._capture_done = threading.Event()
@@ -145,13 +152,18 @@ class ReceiptScanner:
         if self.save_images_dir is None:
             return
         self.save_images_dir.mkdir(parents=True, exist_ok=True)
-        name = f"{receipt.captured_at:%Y%m%d-%H%M%S}_{receipt.receipt_id[:8]}.jpg"
-        path = self.save_images_dir / name
+        path = self.save_images_dir / capture_name(receipt, ".jpg")
         ok, encoded = cv2.imencode(".jpg", image)
         if not ok:
             raise OSError("Could not encode receipt JPEG")
         encoded.tofile(path)
         receipt.image_file = str(path)
+
+    def _save_pdf(self, receipt: Receipt, image: np.ndarray) -> None:
+        if self.save_pdf_dir is None:
+            return
+        path = save_receipt_pdf(image, self.save_pdf_dir / capture_name(receipt, ".pdf"))
+        receipt.pdf_file = str(path)
 
     def _worker(self) -> None:
         try:
@@ -184,11 +196,15 @@ class ReceiptScanner:
             self._set_status("重複收據，已略過")
             return
         failed = False
-        try:
-            self._save_image(receipt, image)
-        except Exception:
-            logger.exception("Could not save receipt image")
-            receipt.warnings.append("image_save_failed")
+        for save, warning in (
+            (self._save_image, "image_save_failed"),
+            (self._save_pdf, "pdf_save_failed"),
+        ):
+            try:
+                save(receipt, image)
+            except Exception:
+                logger.exception("Could not save receipt file (%s)", warning)
+                receipt.warnings.append(warning)
         for sink in self.sinks:
             try:
                 sink.send(receipt)

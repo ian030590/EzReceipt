@@ -4,12 +4,11 @@ import logging
 from pathlib import Path
 from typing import Any
 
-import cv2
 import numpy as np
 
 from .extractors import einvoice
 from .extractors.ocr import OcrEngine, TemplateHook, resolve_fields
-from .imaging import ocr_input, preprocess_ocr
+from .imaging import ocr_input, preprocess_ocr, read_image
 from .models import Receipt
 from .templates.align import match_reference
 from .templates.engine import apply_template
@@ -134,11 +133,5 @@ class Pipeline:
 
 
 def scan_image(path_or_array: str | Path | np.ndarray, **pipeline_kwargs: Any) -> Receipt | None:
-    if isinstance(path_or_array, (str, Path)):
-        data = np.fromfile(path_or_array, dtype=np.uint8)
-        image = cv2.imdecode(data, cv2.IMREAD_COLOR) if data.size else None
-        if image is None:
-            raise ValueError(f"Cannot read image: {path_or_array}")
-    else:
-        image = path_or_array
+    image = read_image(path_or_array) if isinstance(path_or_array, (str, Path)) else path_or_array
     return Pipeline(**pipeline_kwargs).process(image)

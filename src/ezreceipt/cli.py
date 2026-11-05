@@ -7,11 +7,14 @@ import os
 import sys
 import traceback
 from collections.abc import Sequence
+from pathlib import Path
 
 from . import __version__
 from .camera import list_cameras
+from .imaging import read_image
+from .pdf import save_receipt_pdf
 from .pipeline import Pipeline, scan_image
-from .scanner import ReceiptScanner
+from .scanner import ReceiptScanner, capture_name
 from .sinks import JsonlSink, Sink, StdoutSink, WebhookSink
 
 logger = logging.getLogger(__name__)
@@ -22,6 +25,7 @@ def _output_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--webhook", default=os.environ.get("EZRECEIPT_WEBHOOK_URL"))
     parser.add_argument("--webhook-token", default=os.environ.get("EZRECEIPT_WEBHOOK_TOKEN"))
     parser.add_argument("--jsonl")
+    parser.add_argument("--save-pdf", metavar="DIR", help="另存裁切後、白色背景的收據 PDF")
     parser.add_argument("--stdout", action="store_true")
     parser.add_argument("-v", "--verbose", action="store_true")
     _templates_dir_option(parser)
@@ -183,6 +187,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 sinks=sinks,
                 dedupe_window_s=args.dedupe_window,
                 save_images_dir=args.save_images,
+                save_pdf_dir=args.save_pdf,
                 width=args.width,
                 height=args.height,
                 backend=args.backend,
@@ -192,11 +197,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         read_any, failed = False, False
         for path in args.images:
             try:
-                receipt = scan_image(path, **_pipeline_options(args))
+                image = read_image(path)
+                receipt = scan_image(image, **_pipeline_options(args))
                 if receipt is None:
                     logger.warning("無法辨識：%s", path)
                     continue
                 read_any = True
+                if args.save_pdf:
+                    try:
+                        pdf_path = Path(args.save_pdf) / capture_name(receipt, ".pdf")
+                        receipt.pdf_file = str(save_receipt_pdf(image, pdf_path))
+                    except Exception:
+                        failed = True
+                        receipt.warnings.append("pdf_save_failed")
+                        logger.exception("無法儲存 PDF：%s", path)
                 for sink in sinks:
                     try:
                         sink.send(receipt)

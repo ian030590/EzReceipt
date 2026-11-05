@@ -59,6 +59,7 @@ def test_scanner_workers_save_dedupe_and_failed_sink(tmp_path, validate_payload)
         sinks=[BadSink(), GoodSink()],
         save_images_dir=tmp_path / "影像",
         on_status=statuses.append,
+        save_pdf_dir=tmp_path / "收據 PDF",
     )
     frames = [scene()] * 15 + [scene(False)] * 10 + [scene()] * 15
     scanner.frame_source = FakeSource(frames)
@@ -74,6 +75,32 @@ def test_scanner_workers_save_dedupe_and_failed_sink(tmp_path, validate_payload)
     assert len(files) == 1
     assert cv2.imdecode(np.fromfile(files[0], dtype=np.uint8), cv2.IMREAD_COLOR) is not None
     assert received[0]["image_file"] == str(files[0])
+    pdfs = list((tmp_path / "收據 PDF").glob("*.pdf"))
+    assert len(pdfs) == 1 and pdfs[0].stem == files[0].stem
+    assert pdfs[0].read_bytes().startswith(b"%PDF")
+    assert received[0]["pdf_file"] == str(pdfs[0])
+    assert received[0]["warnings"] == []
+
+
+def test_pdf_save_failure_is_a_warning(tmp_path, validate_payload):
+    received = []
+
+    class Pipeline:
+        def process(self, image):
+            return Receipt("local_ocr", total=35, date="2024-11-04")
+
+    class Sink:
+        def send(self, receipt):
+            received.append(validate_payload(receipt))
+
+    blocked = tmp_path / "not-a-directory"
+    blocked.write_text("")
+    scanner = ReceiptScanner(
+        source=FakeSource([]), pipeline=Pipeline(), sinks=[Sink()], save_pdf_dir=blocked
+    )
+    scanner._process_capture(scene())
+    assert received[0]["pdf_file"] is None
+    assert received[0]["warnings"] == ["pdf_save_failed"]
 
 
 def test_dedupe():

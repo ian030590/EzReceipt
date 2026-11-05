@@ -56,6 +56,7 @@ body 為 UTF-8 JSON，一次一筆收據。接收端完成保存後，回覆任�
 | `confidence` | number | 0 到 1 的規則分數，並非經統計校準的正確率 |
 | `warnings` | string[] | 警告代碼，沒有警告時為 `[]` |
 | `image_file` | string / null | 啟用照片保存且成功時的本機檔案路徑，否則為 null |
+| `pdf_file` | string / null | 啟用 `--save-pdf` 且成功時的本機 PDF 路徑，否則為 null |
 
 每個品項都包含以下四個鍵：
 
@@ -104,6 +105,7 @@ QR 品項不完整時，若 OCR 有更多品項則採用 OCR 品項清單。
 | `date_year_inferred` | 年月日格式的兩位民國年 YY 小於 60，補上遺失的百位 1 後落在當年民國年 ±1 年內；例如當年為 115 年時，15年6月30日輸出 2026-06-30 |
 | `ocr_failed` | 自動模式的 OCR 執行失敗，但 QR 仍辨識成功 |
 | `image_save_failed` | 使用者啟用影像保存，但編碼或寫入失敗 |
+| `pdf_save_failed` | 使用者啟用 PDF 保存，但產生或寫入失敗 |
 | `total_from_items` | 原總額缺少，已將可讀的品項金額加總作為總額 |
 | `total_from_currency_mark` | 沒有標示總額；所有 NT$／NT／新台幣／新臺幣金額只有一種不同數值，採用該值 |
 | `total_from_payment` | 收銀機模板總計、項數列、應收金額與銷售總額皆不可讀，改以現金列金額作為總額 |
@@ -152,7 +154,8 @@ QR 資料完整時分數為 0.98，品項不完整為 0.8。
   "custom_fields": [{"key": "serial_no", "label": "交易序號", "value": "A12345"}],
   "confidence": 0.98,
   "warnings": [],
-  "image_file": null
+  "image_file": null,
+  "pdf_file": null
 }
 ```
 
@@ -175,6 +178,8 @@ EzReceipt 的記憶體去重預設只保留 600 秒，重啟程式後不保留�
 接收端必須忽略頂層、品項及自訂欄位物件中的未知欄位。
 JSON Schema 在這三層皆允許額外屬性，既有 `required` 欄位仍須存在；
 `Receipt.from_payload()` 同樣忽略未知屬性。
+`pdf_file` 是後來加入的相容擴充：目前版本每次都會輸出，
+但 JSON Schema 不將它列為必填，舊版產生的 payload 仍可通過驗證。
 
 ## Excel 對應建議
 
@@ -187,7 +192,8 @@ JSON Schema 在這三層皆允許額外屬性，既有 `required` 欄位仍須�
 JSON null 建議對應空白儲存格，金額用數值儲存；不要把未知金額寫成 0。
 `custom_fields` 可展開成額外欄，欄名使用 `label`；若標籤重複，附加 `key` 區別。
 警告清單可用分號串接，同時保留原始 JSON 以利追查。
-`image_file` 是發送機的路徑，不代表接收機能讀取該檔案，Webhook 不上傳影像本體。
+`image_file`、`pdf_file` 是發送機的路徑，不代表接收機能讀取該檔案，
+Webhook 不上傳影像或 PDF 本體。
 
 ## 本機測試
 
